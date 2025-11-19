@@ -1,0 +1,120 @@
+{
+  "name": "git-spaces",
+  "displayName": "Git Spaces",
+  "description": "Manage multiple workspace spaces with independent uncommitted changes and goals",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitSpaces.createSpace",
+        "title": "Git Spaces: Create New Space",
+        "icon": "$(add)"
+      },
+      {
+        "command": "gitSpaces.switchSpace",
+        "title": "Git Spaces: Switch Space",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "gitSpaces.deleteSpace",
+        "title": "Git Spaces: Delete Space",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "gitSpaces.editGoal",
+        "title": "Git Spaces: Edit Space Goal",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "gitSpaces.assignHunkToSpace",
+        "title": "Git Spaces: Assign Hunk to Space"
+      },
+      {
+        "command": "gitSpaces.assignHunkToNewSpace",
+        "title": "Git Spaces: Assign Hunk to New Space"
+      },
+      {
+        "command": "gitSpaces.refreshSpaces",
+        "title": "Git Spaces: Refresh",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "git-spaces",
+          "title": "Git Spaces",
+          "icon": "$(git-branch)"
+        }
+      ]
+    },
+    "views": {
+      "git-spaces": [
+        {
+          "id": "gitSpacesView",
+          "name": "Spaces"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitSpaces.createSpace",
+          "when": "view == gitSpacesView",
+          "group": "navigation"
+        },
+        {
+          "command": "gitSpaces.refreshSpaces",
+          "when": "view == gitSpacesView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "gitSpaces.switchSpace",
+          "when": "view == gitSpacesView && viewItem == space",
+          "group": "inline"
+        },
+        {
+          "command": "gitSpaces.editGoal",
+          "when": "view == gitSpacesView && viewItem == space"
+        },
+        {
+          "command": "gitSpaces.deleteSpace",
+          "when": "view == gitSpacesView && viewItem == space"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "18.x",
+    "@types/uuid": "^10.0.0",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^6.4.1",
+    "@typescript-eslint/parser": "^6.4.1",
+    "eslint": "^8.47.0",
+    "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "simple-git": "^3.19.1",
+    "uuid": "^9.0.0"
+  }
+}
