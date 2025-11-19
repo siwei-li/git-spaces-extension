@@ -20,9 +20,11 @@ export class Commands {
             vscode.commands.registerCommand('gitSpaces.assignHunkToNewSpace', (hunkId) =>
                 this.assignHunkToNewSpace(hunkId)
             ),
+            vscode.commands.registerCommand('gitSpaces.goToHunk', (hunk) => this.goToHunk(hunk)),
             vscode.commands.registerCommand('gitSpaces.refreshSpaces', () => this.refreshSpaces())
         );
     }
+
 
     private async createSpace(): Promise<void> {
         // Get space name
@@ -35,15 +37,13 @@ export class Commands {
             return;
         }
 
-        // Get space goal
+        // Get space goal (optional)
         const goal = await vscode.window.showInputBox({
-            prompt: 'Enter space goal/agenda',
-            placeHolder: 'What are you working on in this space?',
+            prompt: 'Enter space goal/agenda (optional)',
+            placeHolder: 'What are you working on in this space? (defaults to space name)',
         });
 
-        if (!goal) {
-            return;
-        }
+        const finalGoal = goal && goal.trim() !== '' ? goal : name;
 
         // Get space type
         const typeChoice = await vscode.window.showQuickPick(
@@ -73,7 +73,7 @@ export class Commands {
         // Create the space
         const space = await this.spaceManager.createSpace(
             name,
-            goal,
+            finalGoal,
             typeChoice.value as 'branch' | 'temporary',
             branchName
         );
@@ -231,24 +231,39 @@ export class Commands {
             return;
         }
 
-        // Get space goal
+        // Get space goal (optional)
         const goal = await vscode.window.showInputBox({
-            prompt: 'Enter space goal',
-            placeHolder: 'What are you working on?',
+            prompt: 'Enter space goal (optional)',
+            placeHolder: 'What are you working on? (defaults to space name)',
         });
 
-        if (!goal) {
-            return;
-        }
-
         // Create temporary space by default for quick assignment
-        const space = await this.spaceManager.createSpace(name, goal, 'temporary');
+        const space = await this.spaceManager.createSpace(
+            name,
+            goal && goal.trim() !== '' ? goal : name,
+            'temporary'
+        );
         await this.hunkManager.assignHunkToSpace(hunkId, space.id);
 
         vscode.window.showInformationMessage(`Created space "${name}" and assigned hunk`);
     }
 
+    private async goToHunk(hunk: any): Promise<void> {
+        const uri = vscode.Uri.file(hunk.filePath);
+        const document = await vscode.workspace.openTextDocument(uri);
+        const editor = await vscode.window.showTextDocument(document);
+
+        // Navigate to the hunk's start line
+        const position = new vscode.Position(hunk.startLine - 1, 0);
+        editor.selection = new vscode.Selection(position, position);
+        editor.revealRange(
+            new vscode.Range(position, position),
+            vscode.TextEditorRevealType.InCenter
+        );
+    }
+
     private refreshSpaces(): void {
+
         // The tree view will automatically refresh via the event emitter
         vscode.window.showInformationMessage('Refreshed spaces');
     }

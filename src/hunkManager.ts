@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { v4 as uuidv4 } from 'uuid';
+import * as path from 'path';
 import { Hunk } from './types';
 import { GitOperations } from './gitOperations';
 import { Storage } from './storage';
@@ -26,22 +27,31 @@ export class HunkManager {
 
     private async scanExistingChanges(): Promise<void> {
         try {
+            console.log('[Git Spaces] Scanning for existing changes...');
+
             // Check if there are any uncommitted changes
             const hasChanges = await this.gitOps.hasUncommittedChanges();
+            console.log('[Git Spaces] Has uncommitted changes:', hasChanges);
+
             if (!hasChanges) {
                 return;
             }
 
             // Get all changed files
             const changedFiles = await this.gitOps.getChangedFiles();
+            console.log('[Git Spaces] Changed files:', changedFiles);
 
             // Detect hunks for each changed file
             for (const filePath of changedFiles) {
                 const absolutePath = path.join(this.workspaceRoot, filePath);
+                console.log('[Git Spaces] Processing file:', absolutePath);
+
                 const diff = await this.gitOps.getDiff(absolutePath);
 
                 if (diff) {
+                    console.log('[Git Spaces] Diff length:', diff.length);
                     const parsedHunks = await this.gitOps.parseDiffToHunks(diff, absolutePath);
+                    console.log('[Git Spaces] Parsed hunks:', parsedHunks.length);
 
                     for (const parsedHunk of parsedHunks) {
                         // Only add if not already tracked
@@ -63,15 +73,17 @@ export class HunkManager {
                             };
 
                             this.hunks.push(hunk);
+                            console.log('[Git Spaces] Added hunk:', hunk.id, 'at lines', hunk.startLine, '-', hunk.endLine);
                         }
                     }
                 }
             }
 
+            console.log('[Git Spaces] Total hunks after scan:', this.hunks.length);
             await this.saveHunks();
             this.onHunksChangedEmitter.fire(this.hunks);
         } catch (error) {
-            console.error('Error scanning existing changes:', error);
+            console.error('[Git Spaces] Error scanning existing changes:', error);
         }
     }
 

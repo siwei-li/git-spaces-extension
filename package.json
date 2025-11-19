@@ -45,6 +45,10 @@
         "title": "Git Spaces: Assign Hunk to New Space"
       },
       {
+        "command": "gitSpaces.goToHunk",
+        "title": "Git Spaces: Go to Hunk"
+      },
+      {
         "command": "gitSpaces.refreshSpaces",
         "title": "Git Spaces: Refresh",
         "icon": "$(refresh)"

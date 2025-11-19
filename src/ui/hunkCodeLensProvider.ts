@@ -29,6 +29,9 @@ export class HunkCodeLensProvider implements vscode.CodeLensProvider {
         const hunks = this.hunkManager.getHunksForFile(filePath);
         const spaces = this.spaceManager.listSpaces();
 
+        console.log('[Git Spaces] CodeLens for file:', filePath);
+        console.log('[Git Spaces] Hunks found:', hunks.length);
+
         for (const hunk of hunks) {
             const range = new vscode.Range(
                 new vscode.Position(hunk.startLine - 1, 0),

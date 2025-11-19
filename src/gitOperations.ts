@@ -36,6 +36,11 @@ export class GitOperations {
         return status.files.length > 0;
     }
 
+    async getChangedFiles(): Promise<string[]> {
+        const status = await this.git.status();
+        return status.files.map(file => file.path);
+    }
+
     async getDiff(filePath?: string): Promise<string> {
         if (filePath) {
             const relativePath = path.relative(this.workspaceRoot, filePath);

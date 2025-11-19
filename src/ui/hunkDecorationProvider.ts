@@ -40,8 +40,11 @@ export class HunkDecorationProvider {
 
             const decorationType = vscode.window.createTextEditorDecorationType({
                 isWholeLine: true,
-                backgroundColor: new vscode.ThemeColor(`${color}`),
-                overviewRulerColor: new vscode.ThemeColor(`${color}`),
+                backgroundColor: new vscode.ThemeColor(color + '20'), // Add transparency
+                borderWidth: '0 0 0 4px',
+                borderStyle: 'solid',
+                borderColor: new vscode.ThemeColor(color),
+                overviewRulerColor: new vscode.ThemeColor(color),
                 overviewRulerLane: vscode.OverviewRulerLane.Left,
             });
 
@@ -50,6 +53,7 @@ export class HunkDecorationProvider {
 
         return this.decorationTypes.get(spaceId)!;
     }
+
 
     private updateDecorations(): void {
         const editor = vscode.window.activeTextEditor;
