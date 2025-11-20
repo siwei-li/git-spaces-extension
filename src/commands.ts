@@ -14,6 +14,8 @@ export class Commands {
             vscode.commands.registerCommand('gitSpaces.switchSpace', (space) => this.switchSpace(space)),
             vscode.commands.registerCommand('gitSpaces.deleteSpace', (space) => this.deleteSpace(space)),
             vscode.commands.registerCommand('gitSpaces.editGoal', (space) => this.editGoal(space)),
+            vscode.commands.registerCommand('gitSpaces.toggleSpaceType', (space) => this.toggleSpaceType(space)),
+            vscode.commands.registerCommand('gitSpaces.commitSpace', (space) => this.commitSpace(space)),
             vscode.commands.registerCommand('gitSpaces.assignHunkToSpace', (hunkId, spaceId) =>
                 this.assignHunkToSpace(hunkId, spaceId)
             ),
@@ -84,7 +86,6 @@ export class Commands {
             const choice = await vscode.window.showQuickPick(
                 [
                     { label: 'Assign to New Space', value: 'assign' },
-                    { label: 'Keep in Current Space', value: 'keep' },
                     { label: 'Leave Unassigned', value: 'leave' },
                 ],
                 { placeHolder: `You have ${unassignedHunks.length} unassigned hunk(s). What would you like to do?` }
@@ -93,13 +94,6 @@ export class Commands {
             if (choice?.value === 'assign') {
                 for (const hunk of unassignedHunks) {
                     await this.hunkManager.assignHunkToSpace(hunk.id, space.id);
-                }
-            } else if (choice?.value === 'keep') {
-                const activeSpace = this.spaceManager.getActiveSpace();
-                if (activeSpace) {
-                    for (const hunk of unassignedHunks) {
-                        await this.hunkManager.assignHunkToSpace(hunk.id, activeSpace.id);
-                    }
                 }
             }
         }
@@ -266,5 +260,74 @@ export class Commands {
 
         // The tree view will automatically refresh via the event emitter
         vscode.window.showInformationMessage('Refreshed spaces');
+    }
+
+    private async toggleSpaceType(item?: any): Promise<void> {
+        let spaceId: string;
+
+        // Try to extract space ID from various sources
+        if (item?.space?.id) {
+            // Called from tree view with SpaceTreeItem
+            spaceId = item.space.id;
+        } else if (item?.id) {
+            // Called with Space object directly
+            spaceId = item.id;
+        } else {
+            // Show quick pick
+            const spaces = this.spaceManager.listSpaces();
+            const choice = await vscode.window.showQuickPick(
+                spaces.map(s => ({
+                    label: s.name,
+                    description: `${s.type} - ${s.goal}`,
+                    space: s,
+                })),
+                { placeHolder: 'Select space to toggle type' }
+            );
+
+            if (!choice) {
+                return;
+            }
+
+            spaceId = choice.space.id;
+        }
+
+        await this.spaceManager.toggleSpaceType(spaceId);
+    }
+
+    private async commitSpace(item?: any): Promise<void> {
+        console.log('[Git Spaces] commitSpace called with:', item);
+        console.log('[Git Spaces] item type:', typeof item);
+        console.log('[Git Spaces] item.space:', item?.space);
+        console.log('[Git Spaces] item.id:', item?.id);
+
+        let spaceId: string;
+
+        // Try to extract space ID from various sources
+        if (item?.space?.id) {
+            // Called from tree view with SpaceTreeItem
+            spaceId = item.space.id;
+        } else if (item?.id) {
+            // Called with Space object directly
+            spaceId = item.id;
+        } else {
+            // Show quick pick
+            const spaces = this.spaceManager.listSpaces();
+            const choice = await vscode.window.showQuickPick(
+                spaces.map(s => ({
+                    label: s.name,
+                    description: s.goal,
+                    space: s,
+                })),
+                { placeHolder: 'Select space to commit' }
+            );
+
+            if (!choice) {
+                return;
+            }
+
+            spaceId = choice.space.id;
+        }
+
+        await this.spaceManager.commitSpace(spaceId);
     }
 }

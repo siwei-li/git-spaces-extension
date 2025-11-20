@@ -4,7 +4,6 @@ export interface Space {
     goal: string;
     type: 'branch' | 'temporary';
     branchName?: string;
-    isActive: boolean;
     createdAt: number;
     lastModified: number;
 }

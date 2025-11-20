@@ -37,11 +37,9 @@ export class SpaceTreeProvider implements vscode.TreeDataProvider<TreeElement> {
             const space = element as Space;
             const hunkCount = this.hunkManager.getHunksForSpace(space.id).length;
 
-            // Active space is expanded, others are collapsed
+            // Spaces with hunks are collapsible
             const collapsibleState = hunkCount > 0
-                ? (space.isActive
-                    ? vscode.TreeItemCollapsibleState.Expanded
-                    : vscode.TreeItemCollapsibleState.Collapsed)
+                ? vscode.TreeItemCollapsibleState.Collapsed
                 : vscode.TreeItemCollapsibleState.None;
 
             return new SpaceTreeItem(space, collapsibleState);

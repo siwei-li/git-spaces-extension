@@ -19,10 +19,5 @@ export class SpaceTreeItem extends vscode.TreeItem {
         } else {
             this.iconPath = new vscode.ThemeIcon('file');
         }
-
-        // Highlight active space
-        if (space.isActive) {
-            this.iconPath = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.green'));
-        }
     }
 }

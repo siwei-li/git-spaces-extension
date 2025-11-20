@@ -21,22 +21,11 @@ export class SpaceManager {
 
         // Ensure at least one space exists
         if (this.spaces.length === 0) {
-            const defaultSpace = await this.createSpace(
+            await this.createSpace(
                 'Main',
                 'Default workspace',
                 'temporary'
             );
-            defaultSpace.isActive = true;
-            await this.saveSpaces();
-        }
-
-        // Restore active space
-        const activeSpaceId = await this.storage.loadActiveSpaceId();
-        if (activeSpaceId) {
-            const activeSpace = this.spaces.find(s => s.id === activeSpaceId);
-            if (activeSpace) {
-                await this.switchSpace(activeSpace.id);
-            }
         }
     }
 
@@ -52,7 +41,6 @@ export class SpaceManager {
             goal,
             type,
             branchName,
-            isActive: false,
             createdAt: Date.now(),
             lastModified: Date.now(),
         };
@@ -68,22 +56,6 @@ export class SpaceManager {
         const targetSpace = this.spaces.find(s => s.id === spaceId);
         if (!targetSpace) {
             throw new Error('Space not found');
-        }
-
-        const currentSpace = this.getActiveSpace();
-
-        // Unapply current space hunks
-        if (currentSpace) {
-            const currentHunks = this.hunkManager.getHunksForSpace(currentSpace.id);
-            if (currentHunks.length > 0) {
-                try {
-                    await this.hunkManager.unapplyHunks(currentHunks);
-                } catch (error) {
-                    vscode.window.showErrorMessage(`Failed to save current space changes: ${error}`);
-                    return;
-                }
-            }
-            currentSpace.isActive = false;
         }
 
         // Switch branch if needed
@@ -107,11 +79,8 @@ export class SpaceManager {
             }
         }
 
-        targetSpace.isActive = true;
         targetSpace.lastModified = Date.now();
-
         await this.saveSpaces();
-        await this.storage.saveActiveSpaceId(spaceId);
         this.onSpacesChangedEmitter.fire(this.spaces);
 
         vscode.window.showInformationMessage(`Switched to space: ${targetSpace.name}`);
@@ -155,14 +124,6 @@ export class SpaceManager {
             }
         }
 
-        // If deleting active space, switch to another
-        if (space.isActive && this.spaces.length > 1) {
-            const otherSpace = this.spaces.find(s => s.id !== spaceId);
-            if (otherSpace) {
-                await this.switchSpace(otherSpace.id);
-            }
-        }
-
         this.spaces = this.spaces.filter(s => s.id !== spaceId);
         await this.saveSpaces();
         this.onSpacesChangedEmitter.fire(this.spaces);
@@ -180,13 +141,123 @@ export class SpaceManager {
         }
     }
 
+    async toggleSpaceType(spaceId: string): Promise<void> {
+        const space = this.spaces.find(s => s.id === spaceId);
+        if (!space) {
+            throw new Error('Space not found');
+        }
+
+        if (space.type === 'temporary') {
+            // Convert to branch
+            const branchName = await vscode.window.showInputBox({
+                prompt: 'Enter branch name for this space',
+                placeHolder: 'e.g., feature/my-feature',
+                value: space.name.toLowerCase().replace(/\s+/g, '-'),
+            });
+
+            if (!branchName) {
+                return; // User cancelled
+            }
+
+            // Check if branch exists
+            const branchExists = await this.gitOps.branchExists(branchName);
+            if (!branchExists) {
+                // Create the branch
+                try {
+                    await this.gitOps.createBranch(branchName);
+                } catch (error) {
+                    vscode.window.showErrorMessage(`Failed to create branch: ${error}`);
+                    return;
+                }
+            }
+
+            space.type = 'branch';
+            space.branchName = branchName;
+            vscode.window.showInformationMessage(`Converted "${space.name}" to branch space: ${branchName}`);
+        } else {
+            // Convert to temporary
+            const confirm = await vscode.window.showWarningMessage(
+                `Convert "${space.name}" to temporary space? The branch "${space.branchName}" will remain but won't be tracked.`,
+                { modal: true },
+                'Convert'
+            );
+
+            if (confirm !== 'Convert') {
+                return;
+            }
+
+            space.type = 'temporary';
+            space.branchName = undefined;
+            vscode.window.showInformationMessage(`Converted "${space.name}" to temporary space`);
+        }
+
+        space.lastModified = Date.now();
+        await this.saveSpaces();
+        this.onSpacesChangedEmitter.fire(this.spaces);
+    }
+
+    async commitSpace(spaceId: string): Promise<void> {
+        console.log('[Git Spaces] commitSpace called with spaceId:', spaceId);
+
+        const space = this.spaces.find(s => s.id === spaceId);
+        if (!space) {
+            console.error('[Git Spaces] Space not found:', spaceId);
+            throw new Error('Space not found');
+        }
+        console.log('[Git Spaces] Found space:', space.name);
+
+        const hunks = this.hunkManager.getHunksForSpace(spaceId);
+        console.log('[Git Spaces] Found hunks:', hunks.length);
+
+        if (hunks.length === 0) {
+            vscode.window.showInformationMessage('No changes to commit in this space');
+            return;
+        }
+
+        // Get commit message (default to goal)
+        const commitMessage = await vscode.window.showInputBox({
+            prompt: 'Enter commit message',
+            value: space.goal,
+            placeHolder: 'Commit message',
+        });
+        console.log('[Git Spaces] Commit message:', commitMessage);
+
+        if (!commitMessage) {
+            console.log('[Git Spaces] User cancelled commit');
+            return; // User cancelled
+        }
+
+        try {
+            // NOTE: No need to apply hunks since there's no "active space" concept
+            // All changes are already in the working directory
+
+            console.log('[Git Spaces] Staging all changes...');
+            // Stage all changes
+            await this.gitOps.stageAll();
+            console.log('[Git Spaces] Changes staged successfully');
+
+            console.log('[Git Spaces] Creating commit...');
+            // Commit
+            await this.gitOps.commit(commitMessage);
+            console.log('[Git Spaces] Commit created successfully');
+
+            console.log('[Git Spaces] Deleting hunks from space...');
+            // Remove the hunks since they're now committed
+            await this.hunkManager.deleteHunksForSpace(spaceId);
+            console.log('[Git Spaces] Hunks deleted successfully');
+
+            vscode.window.showInformationMessage(`Committed changes in "${space.name}"`);
+        } catch (error) {
+            console.error('[Git Spaces] Commit failed:', error);
+            vscode.window.showErrorMessage(`Failed to commit: ${error}`);
+        }
+    }
+
     listSpaces(): Space[] {
         return [...this.spaces];
     }
 
-    getActiveSpace(): Space | undefined {
-        return this.spaces.find(s => s.isActive);
-    }
+
 
     getSpace(spaceId: string): Space | undefined {
         return this.spaces.find(s => s.id === spaceId);

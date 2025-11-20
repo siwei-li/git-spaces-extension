@@ -22,11 +22,6 @@
         "icon": "$(add)"
       },
       {
-        "command": "gitSpaces.switchSpace",
-        "title": "Git Spaces: Switch Space",
-        "icon": "$(arrow-right)"
-      },
-      {
         "command": "gitSpaces.deleteSpace",
         "title": "Git Spaces: Delete Space",
         "icon": "$(trash)"
@@ -35,6 +30,16 @@
         "command": "gitSpaces.editGoal",
         "title": "Git Spaces: Edit Space Goal",
         "icon": "$(edit)"
+      },
+      {
+        "command": "gitSpaces.toggleSpaceType",
+        "title": "Git Spaces: Toggle Space Type",
+        "icon": "$(symbol-misc)"
+      },
+      {
+        "command": "gitSpaces.commitSpace",
+        "title": "Git Spaces: Commit Space",
+        "icon": "$(check)"
       },
       {
         "command": "gitSpaces.assignHunkToSpace",
@@ -86,17 +91,24 @@
       ],
       "view/item/context": [
         {
-          "command": "gitSpaces.switchSpace",
+          "command": "gitSpaces.commitSpace",
+          "when": "view == gitSpacesView && viewItem == space",
+          "group": "inline"
+        },
+        {
+          "command": "gitSpaces.toggleSpaceType",
           "when": "view == gitSpacesView && viewItem == space",
           "group": "inline"
         },
         {
           "command": "gitSpaces.editGoal",
-          "when": "view == gitSpacesView && viewItem == space"
+          "when": "view == gitSpacesView && viewItem == space",
+          "group": "2_edit"
         },
         {
           "command": "gitSpaces.deleteSpace",
-          "when": "view == gitSpacesView && viewItem == space"
+          "when": "view == gitSpacesView && viewItem == space",
+          "group": "3_delete"
         }
       ]
     }

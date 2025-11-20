@@ -47,21 +47,13 @@ export async function activate(context: vscode.ExtensionContext) {
     // Check for unassigned hunks (from existing uncommitted changes)
     const unassignedHunks = hunkManager.getUnassignedHunks();
     if (unassignedHunks.length > 0) {
-        const activeSpace = spaceManager.getActiveSpace();
-
         const choice = await vscode.window.showInformationMessage(
-            `Found ${unassignedHunks.length} uncommitted change(s). Assign to active space "${activeSpace?.name || 'Main'}"?`,
-            'Assign to Active Space',
+            `Found ${unassignedHunks.length} uncommitted change(s). What would you like to do?`,
             'Leave Unassigned',
             'Create New Space'
         );
 
-        if (choice === 'Assign to Active Space' && activeSpace) {
-            for (const hunk of unassignedHunks) {
-                await hunkManager.assignHunkToSpace(hunk.id, activeSpace.id);
-            }
-            vscode.window.showInformationMessage(`Assigned ${unassignedHunks.length} change(s) to "${activeSpace.name}"`);
-        } else if (choice === 'Create New Space') {
+        if (choice === 'Create New Space') {
             const name = await vscode.window.showInputBox({
                 prompt: 'Enter space name for existing changes',
                 placeHolder: 'e.g., Work in Progress',

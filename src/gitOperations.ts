@@ -27,8 +27,25 @@ export class GitOperations {
         await this.git.checkoutLocalBranch(branchName);
     }
 
+    async branchExists(branchName: string): Promise<boolean> {
+        try {
+            const branches = await this.git.branch();
+            return branches.all.includes(branchName);
+        } catch {
+            return false;
+        }
+    }
+
     async checkoutBranch(branchName: string): Promise<void> {
         await this.git.checkout(branchName);
+    }
+
+    async stageAll(): Promise<void> {
+        await this.git.add('.');
+    }
+
+    async commit(message: string): Promise<void> {
+        await this.git.commit(message);
     }
 
     async hasUncommittedChanges(): Promise<boolean> {
