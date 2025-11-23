@@ -10,6 +10,7 @@ export class HunkManager {
     private changeListeners: vscode.Disposable[] = [];
     private onHunksChangedEmitter = new vscode.EventEmitter<Hunk[]>();
     public readonly onHunksChanged = this.onHunksChangedEmitter.event;
+    private scanTimeout: NodeJS.Timeout | null = null;
 
     constructor(
         private gitOps: GitOperations,
@@ -19,6 +20,16 @@ export class HunkManager {
 
     async initialize(): Promise<void> {
         this.hunks = await this.storage.loadHunks();
+        
+        // Deduplicate hunks by id
+        const uniqueHunks = new Map<string, Hunk>();
+        for (const hunk of this.hunks) {
+            uniqueHunks.set(hunk.id, hunk);
+        }
+        this.hunks = Array.from(uniqueHunks.values());
+        
+        console.log('[Git Spaces] Loaded and deduplicated hunks, count:', this.hunks.length);
+        
         this.startTracking();
 
         // Scan for existing uncommitted changes
@@ -64,18 +75,28 @@ export class HunkManager {
                 return;
             }
 
-            // Get all changed files
+            // Get all changed files (only files with working directory changes)
             const changedFiles = await this.gitOps.getChangedFiles();
             console.log('[Git Spaces] Changed files:', changedFiles);
             
             // Remove hunks for files that are no longer in the changed files list
-            // This includes both assigned and unassigned hunks
+            // This includes both assigned and unassigned hunks, and also hunks with 'staged' status
             const changedFilesAbsolute = changedFiles.map(f => path.join(this.workspaceRoot, f));
             const oldHunkCount = this.hunks.length;
-            this.hunks = this.hunks.filter(h => changedFilesAbsolute.includes(h.filePath));
+            
+            // Remove hunks that:
+            // 1. Are for files no longer in the changed list
+            // 2. Have status 'staged' (these should never persist)
+            this.hunks = this.hunks.filter(h => {
+                if (h.status === 'staged') {
+                    console.log('[Git Spaces] Removing staged hunk:', h.filePath);
+                    return false;
+                }
+                return changedFilesAbsolute.includes(h.filePath);
+            });
             
             if (this.hunks.length !== oldHunkCount) {
-                console.log('[Git Spaces] Removed', oldHunkCount - this.hunks.length, 'hunks for files that are no longer changed');
+                console.log('[Git Spaces] Removed', oldHunkCount - this.hunks.length, 'hunks (files no longer changed or staged)');
             }
 
             // Detect hunks for each changed file
@@ -88,6 +109,12 @@ export class HunkManager {
                     // Determine file status
                     const fileStatus = await this.gitOps.getFileStatus(absolutePath);
                     console.log('[Git Spaces] File status:', fileStatus);
+
+                    // Skip staged files - they shouldn't show in any space
+                    if (fileStatus === 'staged') {
+                        console.log('[Git Spaces] Skipping staged file');
+                        continue;
+                    }
 
                     // Handle deleted files
                     if (fileStatus === 'deleted') {
@@ -222,7 +249,7 @@ export class HunkManager {
     }
 
     private startTracking(): void {
-        // Track document changes
+        // Track document changes in open files
         const changeListener = vscode.workspace.onDidChangeTextDocument(async (event) => {
             if (event.document.uri.scheme === 'file') {
                 console.log('[Git Spaces] Document changed:', event.document.uri.fsPath);
@@ -238,7 +265,29 @@ export class HunkManager {
             }
         });
 
-        this.changeListeners.push(changeListener, saveListener);
+        // Watch for file system changes (create, modify, delete) - this catches ALL file changes
+        const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*', false, false, false);
+        
+        const handleFileChange = (uri: vscode.Uri) => {
+            console.log('[Git Spaces] File system change detected:', uri.fsPath);
+            
+            // Debounce: cancel previous timeout and set a new one
+            if (this.scanTimeout) {
+                clearTimeout(this.scanTimeout);
+            }
+            
+            this.scanTimeout = setTimeout(async () => {
+                console.log('[Git Spaces] Rescanning after file changes...');
+                await this.scanExistingChanges();
+                this.scanTimeout = null;
+            }, 500); // Wait 500ms after last change before scanning
+        };
+
+        fileWatcher.onDidCreate(handleFileChange);
+        fileWatcher.onDidChange(handleFileChange);
+        fileWatcher.onDidDelete(handleFileChange);
+
+        this.changeListeners.push(changeListener, saveListener, fileWatcher);
     }
 
     async detectHunksForDocument(document: vscode.TextDocument): Promise<void> {
@@ -380,19 +429,26 @@ export class HunkManager {
         console.log('[Git Spaces] Removing hunk:', hunkId, 'status:', hunk.status, 'file:', hunk.filePath);
 
         if (discardChanges) {
-            // Discard the actual file changes
-            // Check if file is untracked (either status is 'added' or check git status)
-            let isUntracked = hunk.status === 'added';
+            // Check if this is the only hunk for this file
+            const fileHunks = this.hunks.filter(h => h.filePath === hunk.filePath);
+            const isOnlyHunk = fileHunks.length === 1;
             
-            // If status is not set (old hunks), check git status
-            if (!hunk.status) {
-                const fileStatus = await this.gitOps.getFileStatus(hunk.filePath);
-                isUntracked = fileStatus === 'added';
-                console.log('[Git Spaces] No status on hunk, checked git status:', fileStatus);
+            if (isOnlyHunk) {
+                // Discard entire file
+                console.log('[Git Spaces] Only hunk for file, discarding entire file');
+                let isUntracked = hunk.status === 'added';
+                
+                if (!hunk.status) {
+                    const fileStatus = await this.gitOps.getFileStatus(hunk.filePath);
+                    isUntracked = fileStatus === 'added';
+                }
+                
+                await this.gitOps.discardChanges(hunk.filePath, isUntracked);
+            } else {
+                // Discard just this hunk
+                console.log('[Git Spaces] Multiple hunks for file, discarding specific hunk');
+                await this.gitOps.discardHunk(hunk);
             }
-            
-            console.log('[Git Spaces] Will discard changes, isUntracked:', isUntracked);
-            await this.gitOps.discardChanges(hunk.filePath, isUntracked);
         }
 
         // Remove hunk from tracking
@@ -407,6 +463,9 @@ export class HunkManager {
     }
 
     dispose(): void {
+        if (this.scanTimeout) {
+            clearTimeout(this.scanTimeout);
+        }
         this.changeListeners.forEach(listener => listener.dispose());
         this.onHunksChangedEmitter.dispose();
     }

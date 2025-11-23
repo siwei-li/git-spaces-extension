@@ -61,6 +61,60 @@ export class GitOperations {
         }
     }
 
+    async discardHunk(hunk: any): Promise<void> {
+        console.log('[Git Spaces] Discarding hunk:', hunk.filePath, 'lines', hunk.startLine, '-', hunk.endLine);
+        
+        // For added files, we can't discard individual hunks - must delete whole file
+        if (hunk.status === 'added') {
+            const fs = require('fs').promises;
+            await fs.unlink(hunk.filePath);
+            return;
+        }
+        
+        // For deleted files, restore from HEAD
+        if (hunk.status === 'deleted') {
+            const relativePath = path.relative(this.workspaceRoot, hunk.filePath);
+            await this.git.raw(['restore', '--', relativePath]);
+            return;
+        }
+        
+        // For modified files, create a reverse patch and apply it
+        const reversePatch = this.createReversePatch(hunk);
+        console.log('[Git Spaces] Reverse patch:', reversePatch);
+        
+        // Apply the reverse patch
+        await this.applyPatch(reversePatch);
+    }
+
+    private createReversePatch(hunk: any): string {
+        const relativePath = path.relative(this.workspaceRoot, hunk.filePath);
+        
+        // Create a unified diff patch that reverses the hunk
+        // Swap the + and - prefixes to reverse the change
+        const originalLines = hunk.originalContent.split('\n');
+        const modifiedLines = hunk.content.split('\n');
+        
+        // Count lines for the hunk header
+        const oldCount = modifiedLines.length;
+        const newCount = originalLines.length;
+        
+        let patch = `--- a/${relativePath}\n`;
+        patch += `+++ b/${relativePath}\n`;
+        patch += `@@ -${hunk.startLine},${oldCount} +${hunk.startLine},${newCount} @@\n`;
+        
+        // Add removed lines (from current content)
+        for (const line of modifiedLines) {
+            patch += `-${line}\n`;
+        }
+        
+        // Add added lines (from original content)
+        for (const line of originalLines) {
+            patch += `+${line}\n`;
+        }
+        
+        return patch;
+    }
+
     async stageAll(): Promise<void> {
         await this.git.add('.');
     }
@@ -92,10 +146,14 @@ export class GitOperations {
             modified: status.modified,
             created: status.created
         });
-        return status.files.map(file => file.path);
+        
+        // Only return files with working directory changes (exclude fully staged files)
+        return status.files
+            .filter(file => file.working_dir !== ' ')  // Filter out files with no working dir changes
+            .map(file => file.path);
     }
 
-    async getFileStatus(filePath: string): Promise<'added' | 'deleted' | 'modified' | null> {
+    async getFileStatus(filePath: string): Promise<'added' | 'deleted' | 'modified' | 'staged' | null> {
         const status = await this.git.status();
         const relativePath = path.relative(this.workspaceRoot, filePath);
         const fileStatus = status.files.find(f => f.path === relativePath);
@@ -104,17 +162,23 @@ export class GitOperations {
             return null;
         }
 
-        // Check if file is deleted
+        // Check if file is fully staged (no working directory changes)
+        // index has changes AND working_dir has no changes
+        if (fileStatus.index !== ' ' && fileStatus.index !== '?' && fileStatus.working_dir === ' ') {
+            return 'staged';
+        }
+
+        // Check if file is deleted in working directory
         if (fileStatus.working_dir === 'D' || status.deleted.includes(relativePath)) {
             return 'deleted';
         }
         
-        // Check if file is untracked/added
+        // Check if file is untracked/added in working directory
         if (fileStatus.working_dir === '?' || status.not_added.includes(relativePath) || status.created.includes(relativePath)) {
             return 'added';
         }
         
-        // Otherwise it's modified
+        // Otherwise it's modified (including partially staged files)
         return 'modified';
     }
 

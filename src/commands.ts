@@ -15,6 +15,8 @@ export class Commands {
             vscode.commands.registerCommand('gitSpaces.deleteSpace', (space) => this.deleteSpace(space)),
             vscode.commands.registerCommand('gitSpaces.editGoal', (space) => this.editGoal(space)),
             vscode.commands.registerCommand('gitSpaces.renameSpace', (space) => this.renameSpace(space)),
+            vscode.commands.registerCommand('gitSpaces.reassignSpaceToExisting', (space) => this.reassignSpaceToExisting(space)),
+            vscode.commands.registerCommand('gitSpaces.reassignSpaceToNew', (space) => this.reassignSpaceToNew(space)),
             vscode.commands.registerCommand('gitSpaces.toggleSpaceType', (space) => this.toggleSpaceType(space)),
             vscode.commands.registerCommand('gitSpaces.stageSpace', (space) => this.stageSpace(space)),
             vscode.commands.registerCommand('gitSpaces.assignHunkToSpace', (hunkId, spaceId) =>
@@ -23,8 +25,14 @@ export class Commands {
             vscode.commands.registerCommand('gitSpaces.assignHunkToExistingSpace', (item) =>
                 this.assignHunkToExistingSpace(item)
             ),
+            vscode.commands.registerCommand('gitSpaces.assignFileToExistingSpace', (item) =>
+                this.assignFileToExistingSpace(item)
+            ),
             vscode.commands.registerCommand('gitSpaces.assignHunkToNewSpace', (hunkId) =>
                 this.assignHunkToNewSpace(hunkId)
+            ),
+            vscode.commands.registerCommand('gitSpaces.assignFileToNewSpace', (item) =>
+                this.assignFileToNewSpace(item)
             ),
             vscode.commands.registerCommand('gitSpaces.goToHunk', (hunk) => this.goToHunk(hunk)),
             vscode.commands.registerCommand('gitSpaces.discardHunk', (item) => this.discardHunk(item)),
@@ -278,6 +286,125 @@ export class Commands {
         }
     }
 
+    private async reassignSpaceToExisting(item?: any): Promise<void> {
+        let spaceId: string;
+        let space;
+
+        // Extract space
+        if (item?.space?.id) {
+            spaceId = item.space.id;
+            space = item.space;
+        } else if (item?.id) {
+            spaceId = item.id;
+            space = item;
+        } else {
+            vscode.window.showErrorMessage('No space selected');
+            return;
+        }
+
+        if (!space) {
+            space = this.spaceManager.getSpace(spaceId);
+            if (!space) {
+                return;
+            }
+        }
+
+        // Don't allow reassigning unassigned virtual space
+        if (spaceId === '__unassigned__') {
+            vscode.window.showWarningMessage('Cannot reassign the Unassigned section.');
+            return;
+        }
+
+        const hunks = this.hunkManager.getHunksForSpace(spaceId);
+        if (hunks.length === 0) {
+            vscode.window.showInformationMessage('No changes in this space to reassign');
+            return;
+        }
+
+        // Show quick pick of other spaces
+        const otherSpaces = this.spaceManager.listSpaces().filter(s => s.id !== spaceId);
+        const choice = await vscode.window.showQuickPick(
+            otherSpaces.map(s => ({
+                label: s.name,
+                description: s.goal,
+                detail: `${s.type === 'branch' ? '🌿 Branch' : '📁 Temporary'}`,
+                space: s,
+            })),
+            { placeHolder: `Reassign all ${hunks.length} change(s) from "${space.name}" to:` }
+        );
+
+        if (!choice) {
+            return;
+        }
+
+        // Reassign all hunks
+        await this.hunkManager.reassignHunks(spaceId, choice.space.id);
+        vscode.window.showInformationMessage(`Reassigned ${hunks.length} change(s) to: ${choice.space.name}`);
+    }
+
+    private async reassignSpaceToNew(item?: any): Promise<void> {
+        let spaceId: string;
+        let space;
+
+        // Extract space
+        if (item?.space?.id) {
+            spaceId = item.space.id;
+            space = item.space;
+        } else if (item?.id) {
+            spaceId = item.id;
+            space = item;
+        } else {
+            vscode.window.showErrorMessage('No space selected');
+            return;
+        }
+
+        if (!space) {
+            space = this.spaceManager.getSpace(spaceId);
+            if (!space) {
+                return;
+            }
+        }
+
+        // Don't allow reassigning unassigned virtual space
+        if (spaceId === '__unassigned__') {
+            vscode.window.showWarningMessage('Cannot reassign the Unassigned section.');
+            return;
+        }
+
+        const hunks = this.hunkManager.getHunksForSpace(spaceId);
+        if (hunks.length === 0) {
+            vscode.window.showInformationMessage('No changes in this space to reassign');
+            return;
+        }
+
+        // Get new space name
+        const name = await vscode.window.showInputBox({
+            prompt: 'Enter new space name',
+            placeHolder: 'e.g., Feature X, Bug Fix',
+        });
+
+        if (!name) {
+            return;
+        }
+
+        // Get space goal (optional)
+        const goal = await vscode.window.showInputBox({
+            prompt: 'Enter space goal (optional)',
+            placeHolder: 'What are you working on? (defaults to space name)',
+        });
+
+        // Create new temporary space
+        const newSpace = await this.spaceManager.createSpace(
+            name,
+            goal && goal.trim() !== '' ? goal : name,
+            'temporary'
+        );
+
+        // Reassign all hunks
+        await this.hunkManager.reassignHunks(spaceId, newSpace.id);
+        vscode.window.showInformationMessage(`Created space "${name}" and reassigned ${hunks.length} change(s)`);
+    }
+
     private async assignHunkToSpace(hunkId: string, spaceId: string): Promise<void> {
         await this.hunkManager.assignHunkToSpace(hunkId, spaceId);
         const space = this.spaceManager.getSpace(spaceId);
@@ -323,6 +450,50 @@ export class Commands {
 
         await this.hunkManager.assignHunkToSpace(hunk.id, choice.space.id);
         vscode.window.showInformationMessage(`Assigned to: ${choice.space.name}`);
+    }
+
+    private async assignFileToExistingSpace(item?: any): Promise<void> {
+        // Extract file path from FileGroup item
+        let filePath: string | undefined;
+        
+        if (item?.filePath) {
+            filePath = item.filePath;
+        } else {
+            vscode.window.showErrorMessage('No file selected');
+            return;
+        }
+
+        // Get all hunks for this file
+        const allHunks = this.hunkManager.getAllHunks();
+        const fileHunks = allHunks.filter(h => h.filePath === filePath);
+
+        if (fileHunks.length === 0) {
+            vscode.window.showErrorMessage('No hunks found for this file');
+            return;
+        }
+
+        // Show quick pick of existing spaces
+        const spaces = this.spaceManager.listSpaces();
+        const choice = await vscode.window.showQuickPick(
+            spaces.map(s => ({
+                label: s.name,
+                description: s.goal,
+                detail: `${s.type === 'branch' ? '🌿 Branch' : '📁 Temporary'}`,
+                space: s,
+            })),
+            { placeHolder: `Assign all ${fileHunks.length} change(s) in this file to:` }
+        );
+
+        if (!choice) {
+            return;
+        }
+
+        // Reassign all hunks in this file
+        for (const hunk of fileHunks) {
+            await this.hunkManager.assignHunkToSpace(hunk.id, choice.space.id);
+        }
+
+        vscode.window.showInformationMessage(`Assigned ${fileHunks.length} change(s) to: ${choice.space.name}`);
     }
 
     private async assignHunkToNewSpace(item?: any): Promise<void> {
@@ -373,6 +544,57 @@ export class Commands {
         vscode.window.showInformationMessage(`Created space "${name}" and assigned hunk`);
     }
 
+    private async assignFileToNewSpace(item?: any): Promise<void> {
+        // Extract file path from FileGroup item
+        let filePath: string | undefined;
+        
+        if (item?.filePath) {
+            filePath = item.filePath;
+        } else {
+            vscode.window.showErrorMessage('No file selected');
+            return;
+        }
+
+        // Get all hunks for this file
+        const allHunks = this.hunkManager.getAllHunks();
+        const fileHunks = allHunks.filter(h => h.filePath === filePath);
+
+        if (fileHunks.length === 0) {
+            vscode.window.showErrorMessage('No hunks found for this file');
+            return;
+        }
+
+        // Get space name
+        const name = await vscode.window.showInputBox({
+            prompt: 'Enter new space name',
+            placeHolder: 'e.g., Feature X, Bug Fix',
+        });
+
+        if (!name) {
+            return;
+        }
+
+        // Get space goal (optional)
+        const goal = await vscode.window.showInputBox({
+            prompt: 'Enter space goal (optional)',
+            placeHolder: 'What are you working on? (defaults to space name)',
+        });
+
+        // Create temporary space by default for quick assignment
+        const space = await this.spaceManager.createSpace(
+            name,
+            goal && goal.trim() !== '' ? goal : name,
+            'temporary'
+        );
+        
+        // Assign all hunks in this file
+        for (const hunk of fileHunks) {
+            await this.hunkManager.assignHunkToSpace(hunk.id, space.id);
+        }
+
+        vscode.window.showInformationMessage(`Created space "${name}" and assigned ${fileHunks.length} change(s)`);
+    }
+
     private async goToHunk(hunk: any): Promise<void> {
         const uri = vscode.Uri.file(hunk.filePath);
         const document = await vscode.workspace.openTextDocument(uri);
@@ -407,14 +629,22 @@ export class Commands {
         }
 
         const fileName = require('path').basename(hunk.filePath);
-        let message = `Discard changes in ${fileName}`;
+        const allHunks = this.hunkManager.getAllHunks();
+        const fileHunks = allHunks.filter(h => h.filePath === hunk.filePath);
+        const isOnlyHunk = fileHunks.length === 1;
+        
+        let message = `Discard this change in ${fileName}?`;
         
         if (hunk.status === 'added') {
             message = `Delete untracked file ${fileName}?`;
         } else if (hunk.status === 'deleted') {
             message = `Restore deleted file ${fileName}?`;
         } else if (hunk.status === 'modified') {
-            message = `Discard all changes in ${fileName}?`;
+            if (isOnlyHunk) {
+                message = `Discard all changes in ${fileName}?`;
+            } else {
+                message = `Discard this hunk in ${fileName}? (lines ${hunk.startLine}-${hunk.endLine})`;
+            }
         }
 
         const confirm = await vscode.window.showWarningMessage(

@@ -36,6 +36,14 @@
         "title": "Git Spaces: Rename Space"
       },
       {
+        "command": "gitSpaces.reassignSpaceToExisting",
+        "title": "Git Spaces: Move All Changes to Space"
+      },
+      {
+        "command": "gitSpaces.reassignSpaceToNew",
+        "title": "Git Spaces: Move All Changes to New Space"
+      },
+      {
         "command": "gitSpaces.toggleSpaceType",
         "title": "Git Spaces: Toggle Space Type",
         "icon": "$(symbol-misc)"
@@ -55,9 +63,17 @@
         "icon": "$(arrow-right)"
       },
       {
+        "command": "gitSpaces.assignFileToExistingSpace",
+        "title": "Git Spaces: Assign File to Space"
+      },
+      {
         "command": "gitSpaces.assignHunkToNewSpace",
         "title": "Git Spaces: Assign to New Space",
         "icon": "$(add)"
+      },
+      {
+        "command": "gitSpaces.assignFileToNewSpace",
+        "title": "Git Spaces: Assign File to New Space"
       },
       {
         "command": "gitSpaces.goToHunk",
@@ -126,6 +142,16 @@
           "group": "2_edit"
         },
         {
+          "command": "gitSpaces.reassignSpaceToExisting",
+          "when": "view == gitSpacesView && viewItem == space",
+          "group": "2_edit"
+        },
+        {
+          "command": "gitSpaces.reassignSpaceToNew",
+          "when": "view == gitSpacesView && viewItem == space",
+          "group": "2_edit"
+        },
+        {
           "command": "gitSpaces.deleteSpace",
           "when": "view == gitSpacesView && viewItem == space",
           "group": "3_delete"
@@ -144,6 +170,16 @@
           "command": "gitSpaces.assignHunkToNewSpace",
           "when": "view == gitSpacesView && viewItem == hunk",
           "group": "2_assign"
+        },
+        {
+          "command": "gitSpaces.assignFileToExistingSpace",
+          "when": "view == gitSpacesView && viewItem == fileGroup",
+          "group": "1_assign"
+        },
+        {
+          "command": "gitSpaces.assignFileToNewSpace",
+          "when": "view == gitSpacesView && viewItem == fileGroup",
+          "group": "1_assign"
         },
         {
           "command": "gitSpaces.discardHunk",
