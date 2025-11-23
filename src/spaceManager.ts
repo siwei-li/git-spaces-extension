@@ -21,8 +21,9 @@ export class SpaceManager {
 
         // Ensure at least one space exists
         if (this.spaces.length === 0) {
+            const currentBranch = await this.gitOps.getCurrentBranch();
             await this.createSpace(
-                'Main',
+                currentBranch || 'main',
                 'Default workspace',
                 'temporary'
             );
@@ -138,6 +139,20 @@ export class SpaceManager {
         const space = this.spaces.find(s => s.id === spaceId);
         if (space) {
             space.goal = goal;
+            space.lastModified = Date.now();
+            await this.saveSpaces();
+            this.onSpacesChangedEmitter.fire(this.spaces);
+        }
+    }
+
+    async renameSpace(spaceId: string, name: string): Promise<void> {
+        const space = this.spaces.find(s => s.id === spaceId);
+        if (space) {
+            // Don't allow renaming branch-type spaces
+            if (space.type === 'branch') {
+                throw new Error('Cannot rename branch-type spaces');
+            }
+            space.name = name;
             space.lastModified = Date.now();
             await this.saveSpaces();
             this.onSpacesChangedEmitter.fire(this.spaces);

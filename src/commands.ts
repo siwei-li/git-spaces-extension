@@ -14,6 +14,7 @@ export class Commands {
             vscode.commands.registerCommand('gitSpaces.switchSpace', (space) => this.switchSpace(space)),
             vscode.commands.registerCommand('gitSpaces.deleteSpace', (space) => this.deleteSpace(space)),
             vscode.commands.registerCommand('gitSpaces.editGoal', (space) => this.editGoal(space)),
+            vscode.commands.registerCommand('gitSpaces.renameSpace', (space) => this.renameSpace(space)),
             vscode.commands.registerCommand('gitSpaces.toggleSpaceType', (space) => this.toggleSpaceType(space)),
             vscode.commands.registerCommand('gitSpaces.stageSpace', (space) => this.stageSpace(space)),
             vscode.commands.registerCommand('gitSpaces.assignHunkToSpace', (hunkId, spaceId) =>
@@ -219,6 +220,61 @@ export class Commands {
         if (newGoal !== undefined && newGoal !== currentGoal) {
             await this.spaceManager.updateSpaceGoal(spaceId, newGoal);
             vscode.window.showInformationMessage('Goal updated');
+        }
+    }
+
+    private async renameSpace(item?: any): Promise<void> {
+        let spaceId: string;
+        let space;
+
+        // Try to extract space from various sources
+        if (item?.space?.id) {
+            spaceId = item.space.id;
+            space = item.space;
+        } else if (item?.id) {
+            spaceId = item.id;
+            space = item;
+        } else {
+            // Show quick pick
+            const spaces = this.spaceManager.listSpaces();
+            const choice = await vscode.window.showQuickPick(
+                spaces.map(s => ({
+                    label: s.name,
+                    description: s.goal,
+                    space: s,
+                })),
+                { placeHolder: 'Select space to rename' }
+            );
+
+            if (!choice) {
+                return;
+            }
+
+            spaceId = choice.space.id;
+            space = choice.space;
+        }
+
+        if (!space) {
+            space = this.spaceManager.getSpace(spaceId);
+            if (!space) {
+                return;
+            }
+        }
+
+        // Don't allow renaming branch-type spaces
+        if (space.type === 'branch') {
+            vscode.window.showWarningMessage('Cannot rename branch-type spaces. The space name matches the branch name.');
+            return;
+        }
+
+        const newName = await vscode.window.showInputBox({
+            prompt: 'Enter new space name',
+            value: space.name,
+        });
+
+        if (newName && newName !== space.name) {
+            await this.spaceManager.renameSpace(spaceId, newName);
+            vscode.window.showInformationMessage(`Renamed space to "${newName}"`);
         }
     }
 

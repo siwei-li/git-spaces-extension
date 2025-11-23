@@ -32,6 +32,10 @@
         "icon": "$(edit)"
       },
       {
+        "command": "gitSpaces.renameSpace",
+        "title": "Git Spaces: Rename Space"
+      },
+      {
         "command": "gitSpaces.toggleSpaceType",
         "title": "Git Spaces: Toggle Space Type",
         "icon": "$(symbol-misc)"
@@ -113,6 +117,11 @@
         },
         {
           "command": "gitSpaces.editGoal",
+          "when": "view == gitSpacesView && viewItem == space",
+          "group": "2_edit"
+        },
+        {
+          "command": "gitSpaces.renameSpace",
           "when": "view == gitSpacesView && viewItem == space",
           "group": "2_edit"
         },
