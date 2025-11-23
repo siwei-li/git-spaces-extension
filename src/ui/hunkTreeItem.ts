@@ -12,8 +12,15 @@ export class HunkTreeItem extends vscode.TreeItem {
         let tooltip: string;
         let icon: vscode.ThemeIcon;
 
+        // Special handling for staged hunks
+        if (hunk.status === 'staged') {
+            label = `${fileName} (staged)`;
+            description = `${hunk.endLine - hunk.startLine + 1} lines`;
+            tooltip = `File: ${hunk.filePath}\nStatus: Staged\nLines: ${hunk.startLine}-${hunk.endLine}`;
+            icon = new vscode.ThemeIcon('check', new vscode.ThemeColor('gitDecoration.stageModifiedResourceForeground'));
+        }
         // Special handling for added/deleted files
-        if (hunk.status === 'deleted') {
+        else if (hunk.status === 'deleted') {
             label = `${fileName} (deleted)`;
             description = `${hunk.endLine - hunk.startLine + 1} lines deleted`;
             tooltip = `File: ${hunk.filePath}\nStatus: Deleted\nLines: ${hunk.startLine}-${hunk.endLine}`;

@@ -11,9 +11,8 @@ export class SpaceTreeItem extends vscode.TreeItem {
         this.description = space.goal;
         this.contextValue = 'space';
         
-        // Set tooltip based on space type
-        let actionText = space.type === 'branch' ? 'Commit' : 'Stage';
-        this.tooltip = `${space.name}\n${space.goal}\nType: ${space.type}${space.branchName ? `\nBranch: ${space.branchName}` : ''}\n\nClick the + icon to ${actionText.toLowerCase()} changes`;
+        // Set tooltip
+        this.tooltip = `${space.name}\n${space.goal}\nType: ${space.type}${space.branchName ? `\nBranch: ${space.branchName}` : ''}\n\nClick the + icon to stage changes`;
 
         // Set icon based on type
         if (space.type === 'branch') {
