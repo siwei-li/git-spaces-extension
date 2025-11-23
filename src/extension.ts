@@ -35,7 +35,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // Initialize storage
-    const storage = new Storage(context);
+    const storage = new Storage(context, workspaceRoot);
 
     // Initialize managers
     hunkManager = new HunkManager(gitOps, storage, workspaceRoot);
@@ -85,6 +85,8 @@ export async function activate(context: vscode.ExtensionContext) {
     const treeView = vscode.window.createTreeView('gitSpacesView', {
         treeDataProvider: treeProvider,
         showCollapseAll: true,
+        dragAndDropController: treeProvider,
+        canSelectMany: true
     });
     context.subscriptions.push(treeView);
 
