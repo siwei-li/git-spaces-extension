@@ -44,6 +44,15 @@ export class GitOperations {
         await this.git.add('.');
     }
 
+    async stageFiles(files: string[]): Promise<void> {
+        if (files.length === 0) {
+            return;
+        }
+        // Convert absolute paths to relative paths
+        const relativePaths = files.map(f => path.relative(this.workspaceRoot, f));
+        await this.git.add(relativePaths);
+    }
+
     async commit(message: string): Promise<void> {
         await this.git.commit(message);
     }
@@ -55,15 +64,68 @@ export class GitOperations {
 
     async getChangedFiles(): Promise<string[]> {
         const status = await this.git.status();
+        console.log('[Git Spaces] Git status result:', {
+            files: status.files.map(f => ({ path: f.path, index: f.index, working_dir: f.working_dir })),
+            not_added: status.not_added,
+            deleted: status.deleted,
+            modified: status.modified,
+            created: status.created
+        });
         return status.files.map(file => file.path);
     }
 
-    async getDiff(filePath?: string): Promise<string> {
+    async getFileStatus(filePath: string): Promise<'added' | 'deleted' | 'modified' | null> {
+        const status = await this.git.status();
+        const relativePath = path.relative(this.workspaceRoot, filePath);
+        const fileStatus = status.files.find(f => f.path === relativePath);
+        
+        if (!fileStatus) {
+            return null;
+        }
+
+        // Check if file is deleted
+        if (fileStatus.working_dir === 'D' || status.deleted.includes(relativePath)) {
+            return 'deleted';
+        }
+        
+        // Check if file is untracked/added
+        if (fileStatus.working_dir === '?' || status.not_added.includes(relativePath) || status.created.includes(relativePath)) {
+            return 'added';
+        }
+        
+        // Otherwise it's modified
+        return 'modified';
+    }
+
+    async getDiff(filePath?: string, status?: 'added' | 'deleted' | 'modified'): Promise<string> {
         if (filePath) {
             const relativePath = path.relative(this.workspaceRoot, filePath);
-            return await this.git.diff(['HEAD', relativePath]);
+            
+            // For deleted files, show the diff from HEAD (what was deleted)
+            if (status === 'deleted') {
+                return await this.git.diff(['HEAD', '--', relativePath]);
+            }
+            
+            // For untracked/added files, show diff against empty (no HEAD version)
+            if (status === 'added') {
+                // Show the entire file as added content
+                return await this.git.diff(['--no-index', '/dev/null', relativePath]).catch(() => '');
+            }
+            
+            // For modified files, normal diff
+            return await this.git.diff(['HEAD', '--', relativePath]);
         }
         return await this.git.diff(['HEAD']);
+    }
+
+    async getFileContent(filePath: string): Promise<string> {
+        const fs = require('fs').promises;
+        try {
+            return await fs.readFile(filePath, 'utf8');
+        } catch (error) {
+            console.error('Error reading file:', error);
+            return '';
+        }
     }
 
     async parseDiffToHunks(diff: string, filePath: string): Promise<Partial<Hunk>[]> {

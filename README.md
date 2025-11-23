@@ -6,11 +6,18 @@ A VS Code extension that enables multiple workspace "spaces" with independent un
 
 - **Multiple Spaces**: Create multiple workspace spaces, each with its own set of uncommitted changes
 - **Granular Change Control**: Assign individual hunks (changed sections) to different spaces
+- **Full File Tracking**: Track entire files for additions, deletions, and modifications
+  - **New Files**: Untracked files are shown with their complete content
+  - **Deleted Files**: Deleted files are tracked with their original content
+  - **Modified Files**: Changed sections are tracked as individual hunks
 - **Branch & Temporary Spaces**: Create spaces tied to Git branches or temporary working states
 - **Goal Tracking**: Set goals/agendas for each space to stay organized
 - **Real-time Tracking**: Changes are tracked in real-time as you edit
 - **Inline Actions**: Use CodeLens to assign hunks directly from the editor
-- **Visual Indicators**: Color-coded decorations show which space each hunk belongs to
+- **Visual Indicators**: Color-coded decorations and icons show which space each hunk belongs to
+  - 🗑️ Red icons for deleted files
+  - 📄 Green icons for new/untracked files
+  - 📝 Yellow/orange icons for modified hunks
 
 ## Usage
 
@@ -28,13 +35,6 @@ When you make changes to files, hunks will appear with CodeLens actions above th
 - **📍 Space Name**: Shows current assignment
 - **→ Space Name**: Click to assign to a different space
 - **+ New Space**: Create a new space and assign this hunk
-
-### Switching Spaces
-
-Click on a space in the sidebar to switch to it. The extension will:
-1. Save (unapply) hunks from the current space
-2. Switch to the target branch (if applicable)
-3. Apply hunks assigned to the target space
 
 ### Managing Spaces
 
@@ -61,11 +61,15 @@ This extension does not currently contribute any settings.
 ### 0.0.1
 
 Initial release with core functionality:
+
 - Multiple workspace spaces
 - Hunk-level change assignment
+- Full file tracking for added, deleted, and modified files
+- Support for untracked files and deletions
 - Branch and temporary space types
 - Real-time change tracking
 - CodeLens and decoration providers
+- Color-coded icons for different file statuses
 
 ## Development
 

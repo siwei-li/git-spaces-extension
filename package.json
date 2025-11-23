@@ -37,9 +37,9 @@
         "icon": "$(symbol-misc)"
       },
       {
-        "command": "gitSpaces.commitSpace",
-        "title": "Git Spaces: Commit Space",
-        "icon": "$(check)"
+        "command": "gitSpaces.stageSpace",
+        "title": "Git Spaces: Stage Space",
+        "icon": "$(add)"
       },
       {
         "command": "gitSpaces.assignHunkToSpace",
@@ -91,7 +91,7 @@
       ],
       "view/item/context": [
         {
-          "command": "gitSpaces.commitSpace",
+          "command": "gitSpaces.stageSpace",
           "when": "view == gitSpacesView && viewItem == space",
           "group": "inline"
         },

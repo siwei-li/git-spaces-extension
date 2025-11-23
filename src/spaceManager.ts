@@ -196,8 +196,8 @@ export class SpaceManager {
         this.onSpacesChangedEmitter.fire(this.spaces);
     }
 
-    async commitSpace(spaceId: string): Promise<void> {
-        console.log('[Git Spaces] commitSpace called with spaceId:', spaceId);
+    async stageSpace(spaceId: string): Promise<void> {
+        console.log('[Git Spaces] stageSpace called with spaceId:', spaceId);
 
         const space = this.spaces.find(s => s.id === spaceId);
         if (!space) {
@@ -210,46 +210,24 @@ export class SpaceManager {
         console.log('[Git Spaces] Found hunks:', hunks.length);
 
         if (hunks.length === 0) {
-            vscode.window.showInformationMessage('No changes to commit in this space');
+            vscode.window.showInformationMessage('No changes to stage in this space');
             return;
         }
 
-        // Get commit message (default to goal)
-        const commitMessage = await vscode.window.showInputBox({
-            prompt: 'Enter commit message',
-            value: space.goal,
-            placeHolder: 'Commit message',
-        });
-        console.log('[Git Spaces] Commit message:', commitMessage);
-
-        if (!commitMessage) {
-            console.log('[Git Spaces] User cancelled commit');
-            return; // User cancelled
-        }
-
         try {
-            // NOTE: No need to apply hunks since there's no "active space" concept
-            // All changes are already in the working directory
+            // Get unique list of files that have hunks in this space
+            const filesToStage = [...new Set(hunks.map(h => h.filePath))];
+            console.log('[Git Spaces] Files to stage:', filesToStage);
 
-            console.log('[Git Spaces] Staging all changes...');
-            // Stage all changes
-            await this.gitOps.stageAll();
-            console.log('[Git Spaces] Changes staged successfully');
+            // Stage only the files that have hunks in this space
+            console.log('[Git Spaces] Staging files with hunks...');
+            await this.gitOps.stageFiles(filesToStage);
+            console.log('[Git Spaces] Files staged successfully');
 
-            console.log('[Git Spaces] Creating commit...');
-            // Commit
-            await this.gitOps.commit(commitMessage);
-            console.log('[Git Spaces] Commit created successfully');
-
-            console.log('[Git Spaces] Deleting hunks from space...');
-            // Remove the hunks since they're now committed
-            await this.hunkManager.deleteHunksForSpace(spaceId);
-            console.log('[Git Spaces] Hunks deleted successfully');
-
-            vscode.window.showInformationMessage(`Committed changes in "${space.name}"`);
+            vscode.window.showInformationMessage(`Staged ${filesToStage.length} file(s) from "${space.name}"`);
         } catch (error) {
-            console.error('[Git Spaces] Commit failed:', error);
-            vscode.window.showErrorMessage(`Failed to commit: ${error}`);
+            console.error('[Git Spaces] Staging failed:', error);
+            vscode.window.showErrorMessage(`Failed to stage: ${error}`);
         }
     }
 

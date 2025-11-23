@@ -25,7 +25,7 @@ export class HunkManager {
         await this.scanExistingChanges();
     }
 
-    private async scanExistingChanges(): Promise<void> {
+    async scanExistingChanges(): Promise<void> {
         try {
             console.log('[Git Spaces] Scanning for existing changes...');
 
@@ -43,43 +43,140 @@ export class HunkManager {
 
             // Detect hunks for each changed file
             for (const filePath of changedFiles) {
-                const absolutePath = path.join(this.workspaceRoot, filePath);
-                console.log('[Git Spaces] Processing file:', absolutePath);
+                try {
+                    const absolutePath = path.join(this.workspaceRoot, filePath);
+                    console.log('[Git Spaces] ===== Processing file:', filePath, '=====');
+                    console.log('[Git Spaces] Absolute path:', absolutePath);
 
-                const diff = await this.gitOps.getDiff(absolutePath);
+                    // Determine file status
+                    const fileStatus = await this.gitOps.getFileStatus(absolutePath);
+                    console.log('[Git Spaces] File status:', fileStatus);
 
-                if (diff) {
-                    console.log('[Git Spaces] Diff length:', diff.length);
-                    const parsedHunks = await this.gitOps.parseDiffToHunks(diff, absolutePath);
-                    console.log('[Git Spaces] Parsed hunks:', parsedHunks.length);
+                    // Handle deleted files
+                    if (fileStatus === 'deleted') {
+                        const exists = this.hunks.find(h => h.filePath === absolutePath);
+                        if (!exists) {
+                            // Try to get the content from HEAD to show what was deleted
+                            const diff = await this.gitOps.getDiff(absolutePath, 'deleted');
+                            let deletedContent = '';
+                            let lineCount = 1;
+                            
+                            if (diff) {
+                                // Extract deleted lines from diff
+                                const lines = diff.split('\n').filter(line => line.startsWith('-') && !line.startsWith('---'));
+                                deletedContent = lines.map(line => line.substring(1)).join('\n');
+                                lineCount = deletedContent ? deletedContent.split('\n').length : 1;
+                            }
+                            
+                            const hunk: Hunk = {
+                                id: uuidv4(),
+                                filePath: absolutePath,
+                                startLine: 1,
+                                endLine: lineCount,
+                                content: '',
+                                originalContent: deletedContent || '(deleted file)',
+                                spaceId: '',
+                                timestamp: Date.now(),
+                                status: 'deleted',
+                            };
+                            this.hunks.push(hunk);
+                            console.log('[Git Spaces] ✓ Added deleted file hunk with', lineCount, 'lines');
+                        }
+                        continue;
+                    }
 
-                    for (const parsedHunk of parsedHunks) {
-                        // Only add if not already tracked
-                        const exists = this.hunks.find(
-                            h => h.filePath === parsedHunk.filePath &&
-                                h.startLine === parsedHunk.startLine
-                        );
+                    // Handle untracked/added files
+                    if (fileStatus === 'added') {
+                        const exists = this.hunks.find(h => h.filePath === absolutePath);
+                        if (!exists) {
+                            const fileContent = await this.gitOps.getFileContent(absolutePath);
+                            const lineCount = fileContent ? fileContent.split('\n').length : 1;
+                            console.log('[Git Spaces] Read new file content:', fileContent.length, 'chars,', lineCount, 'lines');
+                            
+                            const hunk: Hunk = {
+                                id: uuidv4(),
+                                filePath: absolutePath,
+                                startLine: 1,
+                                endLine: lineCount,
+                                content: fileContent,
+                                originalContent: '',
+                                spaceId: '',
+                                timestamp: Date.now(),
+                                status: 'added',
+                            };
+                            this.hunks.push(hunk);
+                            console.log('[Git Spaces] ✓ Added untracked/new file hunk with', lineCount, 'lines');
+                        }
+                        continue;
+                    }
 
+                    // Handle modified files with diff
+                    const diff = await this.gitOps.getDiff(absolutePath, fileStatus || 'modified');
+                    console.log('[Git Spaces] Diff result:', diff ? `${diff.length} chars` : 'empty/null');
+
+                    if (diff && diff.trim().length > 0) {
+                        console.log('[Git Spaces] Has diff, parsing hunks...');
+                        const parsedHunks = await this.gitOps.parseDiffToHunks(diff, absolutePath);
+                        console.log('[Git Spaces] Parsed hunks:', parsedHunks.length);
+
+                        for (const parsedHunk of parsedHunks) {
+                            // Only add if not already tracked
+                            const exists = this.hunks.find(
+                                h => h.filePath === parsedHunk.filePath &&
+                                    h.startLine === parsedHunk.startLine
+                            );
+
+                            if (!exists) {
+                                const hunk: Hunk = {
+                                    id: uuidv4(),
+                                    filePath: parsedHunk.filePath!,
+                                    startLine: parsedHunk.startLine!,
+                                    endLine: parsedHunk.endLine!,
+                                    content: parsedHunk.content!,
+                                    originalContent: parsedHunk.originalContent!,
+                                    spaceId: '', // Unassigned initially
+                                    timestamp: Date.now(),
+                                    status: 'modified',
+                                };
+
+                                this.hunks.push(hunk);
+                                console.log('[Git Spaces] ✓ Added hunk:', hunk.id, 'at lines', hunk.startLine, '-', hunk.endLine);
+                            } else {
+                                console.log('[Git Spaces] ✗ Hunk already exists, skipping');
+                            }
+                        }
+                    } else {
+                        // No diff - create entire file hunk as fallback
+                        console.log('[Git Spaces] No diff - creating entire-file hunk');
+
+                        const exists = this.hunks.find(h => h.filePath === absolutePath);
                         if (!exists) {
                             const hunk: Hunk = {
                                 id: uuidv4(),
-                                filePath: parsedHunk.filePath!,
-                                startLine: parsedHunk.startLine!,
-                                endLine: parsedHunk.endLine!,
-                                content: parsedHunk.content!,
-                                originalContent: parsedHunk.originalContent!,
+                                filePath: absolutePath,
+                                startLine: 1,
+                                endLine: 1,
+                                content: '(entire file)',
+                                originalContent: '',
                                 spaceId: '', // Unassigned initially
                                 timestamp: Date.now(),
+                                status: 'modified',
                             };
 
                             this.hunks.push(hunk);
-                            console.log('[Git Spaces] Added hunk:', hunk.id, 'at lines', hunk.startLine, '-', hunk.endLine);
+                            console.log('[Git Spaces] ✓ Added entire-file hunk for:', absolutePath);
+                        } else {
+                            console.log('[Git Spaces] ✗ Entire-file hunk already exists, skipping');
                         }
                     }
+                } catch (fileError) {
+                    console.error('[Git Spaces] Error processing file:', filePath, fileError);
+                    // Continue with next file
                 }
             }
 
             console.log('[Git Spaces] Total hunks after scan:', this.hunks.length);
+            console.log('[Git Spaces] Hunks:', this.hunks.map(h => ({ file: h.filePath, lines: `${h.startLine}-${h.endLine}`, spaceId: h.spaceId || 'unassigned' })));
             await this.saveHunks();
             this.onHunksChangedEmitter.fire(this.hunks);
         } catch (error) {
@@ -91,6 +188,7 @@ export class HunkManager {
         // Track document changes
         const changeListener = vscode.workspace.onDidChangeTextDocument(async (event) => {
             if (event.document.uri.scheme === 'file') {
+                console.log('[Git Spaces] Document changed:', event.document.uri.fsPath);
                 await this.detectHunksForDocument(event.document);
             }
         });
@@ -98,6 +196,7 @@ export class HunkManager {
         // Track document saves
         const saveListener = vscode.workspace.onDidSaveTextDocument(async (document) => {
             if (document.uri.scheme === 'file') {
+                console.log('[Git Spaces] Document saved:', document.uri.fsPath);
                 await this.detectHunksForDocument(document);
             }
         });
@@ -129,6 +228,7 @@ export class HunkManager {
                         h.startLine === parsedHunk.startLine
                 );
 
+                const fileStatus = await this.gitOps.getFileStatus(filePath);
                 const hunk: Hunk = {
                     id: existingHunk?.id || uuidv4(),
                     filePath: parsedHunk.filePath!,
@@ -138,6 +238,7 @@ export class HunkManager {
                     originalContent: parsedHunk.originalContent!,
                     spaceId: existingHunk?.spaceId || '', // Empty means unassigned
                     timestamp: Date.now(),
+                    status: fileStatus || 'modified',
                 };
 
                 this.hunks.push(hunk);
@@ -173,7 +274,12 @@ export class HunkManager {
     }
 
     getHunksForFile(filePath: string): Hunk[] {
-        return this.hunks.filter(h => h.filePath === filePath);
+        const hunks = this.hunks.filter(h => h.filePath === filePath);
+        console.log(`[Git Spaces] getHunksForFile(${filePath}): found ${hunks.length} hunks out of ${this.hunks.length} total`);
+        if (this.hunks.length > 0 && hunks.length === 0) {
+            console.log('[Git Spaces] Available file paths:', this.hunks.map(h => h.filePath));
+        }
+        return hunks;
     }
 
     async applyHunks(hunks: Hunk[]): Promise<void> {

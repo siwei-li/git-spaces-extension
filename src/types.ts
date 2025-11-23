@@ -17,6 +17,7 @@ export interface Hunk {
     originalContent: string;
     spaceId: string;
     timestamp: number;
+    status?: 'added' | 'deleted' | 'modified';
 }
 
 export interface HunkRange {

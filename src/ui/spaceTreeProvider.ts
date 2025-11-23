@@ -35,6 +35,16 @@ export class SpaceTreeProvider implements vscode.TreeDataProvider<TreeElement> {
         if ('goal' in element) {
             // It's a Space
             const space = element as Space;
+
+            // Handle virtual "Unassigned" space
+            if (space.id === '__unassigned__') {
+                const hunkCount = this.hunkManager.getUnassignedHunks().length;
+                const collapsibleState = hunkCount > 0
+                    ? vscode.TreeItemCollapsibleState.Expanded
+                    : vscode.TreeItemCollapsibleState.None;
+                return new SpaceTreeItem(space, collapsibleState);
+            }
+
             const hunkCount = this.hunkManager.getHunksForSpace(space.id).length;
 
             // Spaces with hunks are collapsible
@@ -51,14 +61,36 @@ export class SpaceTreeProvider implements vscode.TreeDataProvider<TreeElement> {
 
     getChildren(element?: TreeElement): Thenable<TreeElement[]> {
         if (!element) {
-            // Root level - return all spaces
-            return Promise.resolve(this.spaceManager.listSpaces());
+            // Root level - return all spaces plus a virtual "Unassigned" space
+            const spaces = this.spaceManager.listSpaces();
+            const unassignedHunks = this.hunkManager.getUnassignedHunks();
+
+            // Create a virtual "Unassigned" space if there are unassigned hunks
+            if (unassignedHunks.length > 0) {
+                const unassignedSpace: Space = {
+                    id: '__unassigned__',
+                    name: 'Unassigned',
+                    goal: `${unassignedHunks.length} unassigned change(s)`,
+                    type: 'temporary',
+                    createdAt: Date.now(),
+                    lastModified: Date.now(),
+                };
+                return Promise.resolve([unassignedSpace, ...spaces]);
+            }
+
+            return Promise.resolve(spaces);
         }
 
         // Check if it's a Space
         if ('goal' in element) {
             // Return hunks for this space
             const space = element as Space;
+
+            // Handle virtual "Unassigned" space
+            if (space.id === '__unassigned__') {
+                return Promise.resolve(this.hunkManager.getUnassignedHunks());
+            }
+
             const hunks = this.hunkManager.getHunksForSpace(space.id);
             return Promise.resolve(hunks);
         }

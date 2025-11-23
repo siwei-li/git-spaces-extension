@@ -15,7 +15,7 @@ export class Commands {
             vscode.commands.registerCommand('gitSpaces.deleteSpace', (space) => this.deleteSpace(space)),
             vscode.commands.registerCommand('gitSpaces.editGoal', (space) => this.editGoal(space)),
             vscode.commands.registerCommand('gitSpaces.toggleSpaceType', (space) => this.toggleSpaceType(space)),
-            vscode.commands.registerCommand('gitSpaces.commitSpace', (space) => this.commitSpace(space)),
+            vscode.commands.registerCommand('gitSpaces.stageSpace', (space) => this.stageSpace(space)),
             vscode.commands.registerCommand('gitSpaces.assignHunkToSpace', (hunkId, spaceId) =>
                 this.assignHunkToSpace(hunkId, spaceId)
             ),
@@ -23,7 +23,8 @@ export class Commands {
                 this.assignHunkToNewSpace(hunkId)
             ),
             vscode.commands.registerCommand('gitSpaces.goToHunk', (hunk) => this.goToHunk(hunk)),
-            vscode.commands.registerCommand('gitSpaces.refreshSpaces', () => this.refreshSpaces())
+            vscode.commands.registerCommand('gitSpaces.refreshSpaces', () => this.refreshSpaces()),
+            vscode.commands.registerCommand('gitSpaces.rescanChanges', () => this.rescanChanges())
         );
     }
 
@@ -130,11 +131,19 @@ export class Commands {
 
     private async deleteSpace(item?: any): Promise<void> {
         let spaceId: string;
+        let space;
 
-        if (item && item.space) {
+        // Try to extract space ID from various sources
+        if (item?.space?.id) {
+            // Called from tree view with SpaceTreeItem
             spaceId = item.space.id;
+            space = item.space;
+        } else if (item?.id) {
+            // Called with Space object directly
+            spaceId = item.id;
+            space = item;
         } else {
-            // Show quick pick
+            // Show quick pick only if no space was provided
             const spaces = this.spaceManager.listSpaces();
             const choice = await vscode.window.showQuickPick(
                 spaces.map(s => ({
@@ -150,11 +159,14 @@ export class Commands {
             }
 
             spaceId = choice.space.id;
+            space = choice.space;
         }
 
-        const space = this.spaceManager.getSpace(spaceId);
         if (!space) {
-            return;
+            space = this.spaceManager.getSpace(spaceId);
+            if (!space) {
+                return;
+            }
         }
 
         const confirm = await vscode.window.showWarningMessage(
@@ -256,10 +268,20 @@ export class Commands {
         );
     }
 
-    private refreshSpaces(): void {
+    private async refreshSpaces(): Promise<void> {
+        vscode.window.showInformationMessage('Refreshing spaces and rescanning changes...');
+        await this.hunkManager.scanExistingChanges();
+        const unassignedCount = this.hunkManager.getUnassignedHunks().length;
+        const totalCount = this.hunkManager.getAllHunks().length;
+        vscode.window.showInformationMessage(`Refreshed! Found ${totalCount} total hunks (${unassignedCount} unassigned)`);
+    }
 
-        // The tree view will automatically refresh via the event emitter
-        vscode.window.showInformationMessage('Refreshed spaces');
+    private async rescanChanges(): Promise<void> {
+        vscode.window.showInformationMessage('Rescanning for changes...');
+        await this.hunkManager.scanExistingChanges();
+        const unassignedCount = this.hunkManager.getUnassignedHunks().length;
+        const totalCount = this.hunkManager.getAllHunks().length;
+        vscode.window.showInformationMessage(`Found ${totalCount} total hunks (${unassignedCount} unassigned)`);
     }
 
     private async toggleSpaceType(item?: any): Promise<void> {
@@ -294,8 +316,8 @@ export class Commands {
         await this.spaceManager.toggleSpaceType(spaceId);
     }
 
-    private async commitSpace(item?: any): Promise<void> {
-        console.log('[Git Spaces] commitSpace called with:', item);
+    private async stageSpace(item?: any): Promise<void> {
+        console.log('[Git Spaces] stageSpace called with:', item);
         console.log('[Git Spaces] item type:', typeof item);
         console.log('[Git Spaces] item.space:', item?.space);
         console.log('[Git Spaces] item.id:', item?.id);
@@ -318,7 +340,7 @@ export class Commands {
                     description: s.goal,
                     space: s,
                 })),
-                { placeHolder: 'Select space to commit' }
+                { placeHolder: 'Select space to stage' }
             );
 
             if (!choice) {
@@ -328,6 +350,6 @@ export class Commands {
             spaceId = choice.space.id;
         }
 
-        await this.spaceManager.commitSpace(spaceId);
+        await this.spaceManager.stageSpace(spaceId);
     }
 }
