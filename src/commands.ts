@@ -37,8 +37,8 @@ export class Commands {
     private async createSpace(): Promise<void> {
         // Get space name
         const name = await vscode.window.showInputBox({
-            prompt: 'Enter space name',
-            placeHolder: 'e.g., Feature X, Bug Fix, Refactoring',
+            prompt: 'Enter space name (potentially the name for a future branch) ',
+            placeHolder: 'e.g., feature-X, bug-fix, refactoring',
         });
 
         if (!name) {

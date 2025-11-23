@@ -55,8 +55,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (choice === 'Create New Space') {
             const name = await vscode.window.showInputBox({
-                prompt: 'Enter space name for existing changes',
-                placeHolder: 'e.g., Work in Progress',
+                prompt: 'Enter space name (potentially the name for a future branch) ',
+                placeHolder: 'e.g. feature-X, bug-fix, refactoring',
             });
 
             if (name) {
