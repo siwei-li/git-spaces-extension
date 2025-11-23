@@ -54,6 +54,11 @@
         "title": "Git Spaces: Go to Hunk"
       },
       {
+        "command": "gitSpaces.discardHunk",
+        "title": "Git Spaces: Discard Hunk",
+        "icon": "$(discard)"
+      },
+      {
         "command": "gitSpaces.refreshSpaces",
         "title": "Git Spaces: Refresh",
         "icon": "$(refresh)"
@@ -109,6 +114,16 @@
           "command": "gitSpaces.deleteSpace",
           "when": "view == gitSpacesView && viewItem == space",
           "group": "3_delete"
+        },
+        {
+          "command": "gitSpaces.goToHunk",
+          "when": "view == gitSpacesView && viewItem == hunk",
+          "group": "1_navigate"
+        },
+        {
+          "command": "gitSpaces.discardHunk",
+          "when": "view == gitSpacesView && viewItem == hunk",
+          "group": "2_discard"
         }
       ]
     }

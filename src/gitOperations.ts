@@ -40,6 +40,27 @@ export class GitOperations {
         await this.git.checkout(branchName);
     }
 
+    async discardChanges(filePath: string, isUntracked: boolean = false): Promise<void> {
+        console.log('[Git Spaces] Discarding changes for:', filePath, 'isUntracked:', isUntracked);
+        
+        if (isUntracked) {
+            // Delete untracked file directly (don't use git)
+            const fs = require('fs').promises;
+            try {
+                await fs.unlink(filePath);
+                console.log('[Git Spaces] Successfully deleted untracked file:', filePath);
+            } catch (error) {
+                console.error('[Git Spaces] Error deleting untracked file:', error);
+                throw error;
+            }
+        } else {
+            // Restore file to HEAD state (discards modifications and deletions)
+            const relativePath = path.relative(this.workspaceRoot, filePath);
+            console.log('[Git Spaces] Restoring file to HEAD:', relativePath);
+            await this.git.raw(['restore', '--', relativePath]);
+        }
+    }
+
     async stageAll(): Promise<void> {
         await this.git.add('.');
     }

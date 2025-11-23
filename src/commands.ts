@@ -23,6 +23,7 @@ export class Commands {
                 this.assignHunkToNewSpace(hunkId)
             ),
             vscode.commands.registerCommand('gitSpaces.goToHunk', (hunk) => this.goToHunk(hunk)),
+            vscode.commands.registerCommand('gitSpaces.discardHunk', (item) => this.discardHunk(item)),
             vscode.commands.registerCommand('gitSpaces.refreshSpaces', () => this.refreshSpaces()),
             vscode.commands.registerCommand('gitSpaces.rescanChanges', () => this.rescanChanges())
         );
@@ -266,6 +267,52 @@ export class Commands {
             new vscode.Range(position, position),
             vscode.TextEditorRevealType.InCenter
         );
+    }
+
+    private async discardHunk(item?: any): Promise<void> {
+        let hunk;
+        
+        // Extract hunk from the item
+        if (item?.hunk) {
+            hunk = item.hunk;
+        } else if (item?.id) {
+            // Get hunk by ID from hunk manager
+            hunk = this.hunkManager.getAllHunks().find(h => h.id === item.id);
+        } else {
+            vscode.window.showErrorMessage('No hunk selected');
+            return;
+        }
+
+        if (!hunk) {
+            vscode.window.showErrorMessage('Hunk not found');
+            return;
+        }
+
+        const fileName = require('path').basename(hunk.filePath);
+        let message = `Discard changes in ${fileName}`;
+        
+        if (hunk.status === 'added') {
+            message = `Delete untracked file ${fileName}?`;
+        } else if (hunk.status === 'deleted') {
+            message = `Restore deleted file ${fileName}?`;
+        } else if (hunk.status === 'modified') {
+            message = `Discard all changes in ${fileName}?`;
+        }
+
+        const confirm = await vscode.window.showWarningMessage(
+            message,
+            { modal: true },
+            'Discard'
+        );
+
+        if (confirm === 'Discard') {
+            try {
+                await this.hunkManager.removeHunk(hunk.id, true);
+                vscode.window.showInformationMessage(`Changes discarded for ${fileName}`);
+            } catch (error) {
+                vscode.window.showErrorMessage(`Failed to discard changes: ${error}`);
+            }
+        }
     }
 
     private async refreshSpaces(): Promise<void> {

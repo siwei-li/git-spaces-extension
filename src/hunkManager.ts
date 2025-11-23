@@ -23,6 +23,28 @@ export class HunkManager {
 
         // Scan for existing uncommitted changes
         await this.scanExistingChanges();
+        
+        // Watch for git operations (like commits) to rescan
+        this.watchGitOperations();
+    }
+
+    private watchGitOperations(): void {
+        // Watch .git/index file for changes (indicates staging/committing)
+        const gitIndexPath = vscode.Uri.file(`${this.workspaceRoot}/.git/index`);
+        const watcher = vscode.workspace.createFileSystemWatcher(gitIndexPath.fsPath);
+        
+        const handleGitChange = async () => {
+            console.log('[Git Spaces] Git index changed, rescanning...');
+            // Wait a bit for git operations to complete
+            setTimeout(async () => {
+                await this.scanExistingChanges();
+            }, 500);
+        };
+        
+        watcher.onDidChange(handleGitChange);
+        watcher.onDidCreate(handleGitChange);
+        
+        this.changeListeners.push(watcher);
     }
 
     async scanExistingChanges(): Promise<void> {
@@ -34,12 +56,27 @@ export class HunkManager {
             console.log('[Git Spaces] Has uncommitted changes:', hasChanges);
 
             if (!hasChanges) {
+                // No changes - clear all unassigned hunks
+                console.log('[Git Spaces] No uncommitted changes, clearing unassigned hunks');
+                this.hunks = this.hunks.filter(h => h.spaceId && h.spaceId !== '');
+                await this.saveHunks();
+                this.onHunksChangedEmitter.fire(this.hunks);
                 return;
             }
 
             // Get all changed files
             const changedFiles = await this.gitOps.getChangedFiles();
             console.log('[Git Spaces] Changed files:', changedFiles);
+            
+            // Remove hunks for files that are no longer in the changed files list
+            // This includes both assigned and unassigned hunks
+            const changedFilesAbsolute = changedFiles.map(f => path.join(this.workspaceRoot, f));
+            const oldHunkCount = this.hunks.length;
+            this.hunks = this.hunks.filter(h => changedFilesAbsolute.includes(h.filePath));
+            
+            if (this.hunks.length !== oldHunkCount) {
+                console.log('[Git Spaces] Removed', oldHunkCount - this.hunks.length, 'hunks for files that are no longer changed');
+            }
 
             // Detect hunks for each changed file
             for (const filePath of changedFiles) {
@@ -331,6 +368,38 @@ export class HunkManager {
         this.hunks = this.hunks.filter(h => h.spaceId !== spaceId);
         await this.saveHunks();
         this.onHunksChangedEmitter.fire(this.hunks);
+    }
+
+    async removeHunk(hunkId: string, discardChanges: boolean = true): Promise<void> {
+        const hunk = this.hunks.find(h => h.id === hunkId);
+        if (!hunk) {
+            console.error('[Git Spaces] Hunk not found:', hunkId);
+            return;
+        }
+
+        console.log('[Git Spaces] Removing hunk:', hunkId, 'status:', hunk.status, 'file:', hunk.filePath);
+
+        if (discardChanges) {
+            // Discard the actual file changes
+            // Check if file is untracked (either status is 'added' or check git status)
+            let isUntracked = hunk.status === 'added';
+            
+            // If status is not set (old hunks), check git status
+            if (!hunk.status) {
+                const fileStatus = await this.gitOps.getFileStatus(hunk.filePath);
+                isUntracked = fileStatus === 'added';
+                console.log('[Git Spaces] No status on hunk, checked git status:', fileStatus);
+            }
+            
+            console.log('[Git Spaces] Will discard changes, isUntracked:', isUntracked);
+            await this.gitOps.discardChanges(hunk.filePath, isUntracked);
+        }
+
+        // Remove hunk from tracking
+        this.hunks = this.hunks.filter(h => h.id !== hunkId);
+        await this.saveHunks();
+        this.onHunksChangedEmitter.fire(this.hunks);
+        console.log('[Git Spaces] Hunk removed successfully');
     }
 
     private async saveHunks(): Promise<void> {

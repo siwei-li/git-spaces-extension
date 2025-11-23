@@ -224,6 +224,14 @@ export class SpaceManager {
             await this.gitOps.stageFiles(filesToStage);
             console.log('[Git Spaces] Files staged successfully');
 
+            // Remove hunks for this space since they're now staged
+            console.log('[Git Spaces] Removing hunks for staged files...');
+            await this.hunkManager.deleteHunksForSpace(spaceId);
+            
+            // Rescan to pick up any remaining changes
+            console.log('[Git Spaces] Rescanning for remaining changes...');
+            await this.hunkManager.scanExistingChanges();
+
             vscode.window.showInformationMessage(`Staged ${filesToStage.length} file(s) from "${space.name}"`);
         } catch (error) {
             console.error('[Git Spaces] Staging failed:', error);
