@@ -35,12 +35,15 @@ export class SpaceManager {
         type: 'branch' | 'temporary',
         branchName?: string
     ): Promise<Space> {
+        // For branch-type spaces, use the branch name as the space name
+        const spaceName = type === 'branch' && branchName ? branchName : name;
+        
         const space: Space = {
             id: uuidv4(),
-            name,
+            name: spaceName,
             goal,
             type,
-            branchName,
+            branchName: type === 'branch' ? branchName : undefined,
             createdAt: Date.now(),
             lastModified: Date.now(),
         };
@@ -173,7 +176,8 @@ export class SpaceManager {
 
             space.type = 'branch';
             space.branchName = branchName;
-            vscode.window.showInformationMessage(`Converted "${space.name}" to branch space: ${branchName}`);
+            space.name = branchName; // Sync space name with branch name
+            vscode.window.showInformationMessage(`Converted "${branchName}" to branch space`);
         } else {
             // Convert to temporary
             const confirm = await vscode.window.showWarningMessage(
@@ -198,13 +202,15 @@ export class SpaceManager {
 
     async stageSpace(spaceId: string): Promise<void> {
         console.log('[Git Spaces] stageSpace called with spaceId:', spaceId);
+        console.log('[Git Spaces] Current spaces:', this.spaces.map(s => ({ id: s.id, name: s.name })));
 
         const space = this.spaces.find(s => s.id === spaceId);
         if (!space) {
             console.error('[Git Spaces] Space not found:', spaceId);
+            console.error('[Git Spaces] Available space IDs:', this.spaces.map(s => s.id));
             throw new Error('Space not found');
         }
-        console.log('[Git Spaces] Found space:', space.name);
+        console.log('[Git Spaces] Found space:', space.name, 'type:', space.type);
 
         const hunks = this.hunkManager.getHunksForSpace(spaceId);
         console.log('[Git Spaces] Found hunks:', hunks.length);
@@ -219,20 +225,56 @@ export class SpaceManager {
             const filesToStage = [...new Set(hunks.map(h => h.filePath))];
             console.log('[Git Spaces] Files to stage:', filesToStage);
 
-            // Stage only the files that have hunks in this space
-            console.log('[Git Spaces] Staging files with hunks...');
-            await this.gitOps.stageFiles(filesToStage);
-            console.log('[Git Spaces] Files staged successfully');
+            if (space.type === 'branch') {
+                // For branch spaces: checkout the branch, stage files, and commit
+                if (!space.branchName) {
+                    throw new Error('Branch space has no branch name');
+                }
 
-            // Remove hunks for this space since they're now staged
-            console.log('[Git Spaces] Removing hunks for staged files...');
-            await this.hunkManager.deleteHunksForSpace(spaceId);
-            
-            // Rescan to pick up any remaining changes
-            console.log('[Git Spaces] Rescanning for remaining changes...');
-            await this.hunkManager.scanExistingChanges();
+                console.log('[Git Spaces] Checking out branch:', space.branchName);
+                await this.gitOps.checkoutBranch(space.branchName);
 
-            vscode.window.showInformationMessage(`Staged ${filesToStage.length} file(s) from "${space.name}"`);
+                console.log('[Git Spaces] Staging files...');
+                await this.gitOps.stageFiles(filesToStage);
+
+                const commitMessage = await vscode.window.showInputBox({
+                    prompt: `Commit message for ${space.branchName}`,
+                    placeHolder: 'Enter commit message',
+                    value: space.goal,
+                });
+
+                if (!commitMessage) {
+                    vscode.window.showWarningMessage('Commit cancelled');
+                    return;
+                }
+
+                console.log('[Git Spaces] Committing changes...');
+                await this.gitOps.commit(commitMessage);
+
+                // Remove hunks for this space since they're now committed
+                console.log('[Git Spaces] Removing hunks for committed files...');
+                await this.hunkManager.deleteHunksForSpace(spaceId);
+                
+                // Rescan to pick up any remaining changes
+                console.log('[Git Spaces] Rescanning for remaining changes...');
+                await this.hunkManager.scanExistingChanges();
+
+                vscode.window.showInformationMessage(`Committed ${filesToStage.length} file(s) to branch "${space.branchName}"`);
+            } else {
+                // For temporary spaces: just stage the changes
+                console.log('[Git Spaces] Staging files for temporary space...');
+                await this.gitOps.stageFiles(filesToStage);
+
+                // Remove hunks for this space since they're now staged
+                console.log('[Git Spaces] Removing hunks for staged files...');
+                await this.hunkManager.deleteHunksForSpace(spaceId);
+                
+                // Rescan to pick up any remaining changes
+                console.log('[Git Spaces] Rescanning for remaining changes...');
+                await this.hunkManager.scanExistingChanges();
+
+                vscode.window.showInformationMessage(`Staged ${filesToStage.length} file(s) from "${space.name}"`);
+            }
         } catch (error) {
             console.error('[Git Spaces] Staging failed:', error);
             vscode.window.showErrorMessage(`Failed to stage: ${error}`);

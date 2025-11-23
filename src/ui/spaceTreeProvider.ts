@@ -42,7 +42,9 @@ export class SpaceTreeProvider implements vscode.TreeDataProvider<TreeElement> {
                 const collapsibleState = hunkCount > 0
                     ? vscode.TreeItemCollapsibleState.Expanded
                     : vscode.TreeItemCollapsibleState.None;
-                return new SpaceTreeItem(space, collapsibleState);
+                const treeItem = new SpaceTreeItem(space, collapsibleState);
+                treeItem.contextValue = 'unassigned'; // Different context for unassigned
+                return treeItem;
             }
 
             const hunkCount = this.hunkManager.getHunksForSpace(space.id).length;

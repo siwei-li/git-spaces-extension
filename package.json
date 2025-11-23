@@ -46,8 +46,14 @@
         "title": "Git Spaces: Assign Hunk to Space"
       },
       {
+        "command": "gitSpaces.assignHunkToExistingSpace",
+        "title": "Git Spaces: Assign to Space",
+        "icon": "$(arrow-right)"
+      },
+      {
         "command": "gitSpaces.assignHunkToNewSpace",
-        "title": "Git Spaces: Assign Hunk to New Space"
+        "title": "Git Spaces: Assign to New Space",
+        "icon": "$(add)"
       },
       {
         "command": "gitSpaces.goToHunk",
@@ -121,9 +127,19 @@
           "group": "1_navigate"
         },
         {
+          "command": "gitSpaces.assignHunkToExistingSpace",
+          "when": "view == gitSpacesView && viewItem == hunk",
+          "group": "2_assign"
+        },
+        {
+          "command": "gitSpaces.assignHunkToNewSpace",
+          "when": "view == gitSpacesView && viewItem == hunk",
+          "group": "2_assign"
+        },
+        {
           "command": "gitSpaces.discardHunk",
           "when": "view == gitSpacesView && viewItem == hunk",
-          "group": "2_discard"
+          "group": "3_discard"
         }
       ]
     }

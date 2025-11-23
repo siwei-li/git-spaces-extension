@@ -19,6 +19,9 @@ export class Commands {
             vscode.commands.registerCommand('gitSpaces.assignHunkToSpace', (hunkId, spaceId) =>
                 this.assignHunkToSpace(hunkId, spaceId)
             ),
+            vscode.commands.registerCommand('gitSpaces.assignHunkToExistingSpace', (item) =>
+                this.assignHunkToExistingSpace(item)
+            ),
             vscode.commands.registerCommand('gitSpaces.assignHunkToNewSpace', (hunkId) =>
                 this.assignHunkToNewSpace(hunkId)
             ),
@@ -227,7 +230,66 @@ export class Commands {
         }
     }
 
-    private async assignHunkToNewSpace(hunkId: string): Promise<void> {
+    private async assignHunkToExistingSpace(item?: any): Promise<void> {
+        let hunk;
+        
+        // Extract hunk from the item
+        if (item?.hunk) {
+            hunk = item.hunk;
+        } else if (item?.id) {
+            // Get hunk by ID from hunk manager
+            hunk = this.hunkManager.getAllHunks().find(h => h.id === item.id);
+        } else {
+            vscode.window.showErrorMessage('No hunk selected');
+            return;
+        }
+
+        if (!hunk) {
+            vscode.window.showErrorMessage('Hunk not found');
+            return;
+        }
+
+        // Show quick pick of existing spaces
+        const spaces = this.spaceManager.listSpaces();
+        const choice = await vscode.window.showQuickPick(
+            spaces.map(s => ({
+                label: s.name,
+                description: s.goal,
+                detail: `${s.type === 'branch' ? '🌿 Branch' : '📁 Temporary'}`,
+                space: s,
+            })),
+            { placeHolder: 'Select space to assign hunk to' }
+        );
+
+        if (!choice) {
+            return;
+        }
+
+        await this.hunkManager.assignHunkToSpace(hunk.id, choice.space.id);
+        vscode.window.showInformationMessage(`Assigned to: ${choice.space.name}`);
+    }
+
+    private async assignHunkToNewSpace(item?: any): Promise<void> {
+        let hunk;
+        
+        // Extract hunk from the item or use the passed hunkId for backward compatibility
+        if (typeof item === 'string') {
+            // Old style: just hunkId passed
+            hunk = this.hunkManager.getAllHunks().find(h => h.id === item);
+        } else if (item?.hunk) {
+            hunk = item.hunk;
+        } else if (item?.id) {
+            hunk = this.hunkManager.getAllHunks().find(h => h.id === item.id);
+        } else {
+            vscode.window.showErrorMessage('No hunk selected');
+            return;
+        }
+
+        if (!hunk) {
+            vscode.window.showErrorMessage('Hunk not found');
+            return;
+        }
+
         // Get space name
         const name = await vscode.window.showInputBox({
             prompt: 'Enter new space name',
@@ -250,7 +312,7 @@ export class Commands {
             goal && goal.trim() !== '' ? goal : name,
             'temporary'
         );
-        await this.hunkManager.assignHunkToSpace(hunkId, space.id);
+        await this.hunkManager.assignHunkToSpace(hunk.id, space.id);
 
         vscode.window.showInformationMessage(`Created space "${name}" and assigned hunk`);
     }
@@ -369,17 +431,20 @@ export class Commands {
         console.log('[Git Spaces] item.space:', item?.space);
         console.log('[Git Spaces] item.id:', item?.id);
 
-        let spaceId: string;
+        let spaceId: string | undefined;
 
         // Try to extract space ID from various sources
         if (item?.space?.id) {
             // Called from tree view with SpaceTreeItem
             spaceId = item.space.id;
+            console.log('[Git Spaces] Extracted spaceId from item.space.id:', spaceId);
         } else if (item?.id) {
             // Called with Space object directly
             spaceId = item.id;
+            console.log('[Git Spaces] Extracted spaceId from item.id:', spaceId);
         } else {
             // Show quick pick
+            console.log('[Git Spaces] No item provided, showing quick pick');
             const spaces = this.spaceManager.listSpaces();
             const choice = await vscode.window.showQuickPick(
                 spaces.map(s => ({
@@ -395,8 +460,27 @@ export class Commands {
             }
 
             spaceId = choice.space.id;
+            console.log('[Git Spaces] Extracted spaceId from choice:', spaceId);
         }
 
-        await this.spaceManager.stageSpace(spaceId);
+        if (!spaceId) {
+            vscode.window.showErrorMessage('Could not determine space ID');
+            console.error('[Git Spaces] spaceId is undefined!');
+            return;
+        }
+
+        // Don't allow staging the virtual "Unassigned" space
+        if (spaceId === '__unassigned__') {
+            vscode.window.showWarningMessage('Cannot stage the Unassigned section. Please assign hunks to a space first.');
+            return;
+        }
+
+        console.log('[Git Spaces] Calling stageSpace with spaceId:', spaceId);
+        try {
+            await this.spaceManager.stageSpace(spaceId);
+        } catch (error) {
+            console.error('[Git Spaces] Error in stageSpace:', error);
+            vscode.window.showErrorMessage(`Failed to stage space: ${error}`);
+        }
     }
 }
